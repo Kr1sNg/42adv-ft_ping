@@ -319,3 +319,5 @@ struct icmp
 #define	icmp_mask	icmp_dun.id_mask
 #define	icmp_data	icmp_dun.id_data
 };
+
+
