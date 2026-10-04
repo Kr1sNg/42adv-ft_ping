@@ -80,7 +80,7 @@ Send ICMP ECHO_REQUEST packets to network hosts.
  Options valid for all request types:
 
   -c, --count=NUMBER         stop after sending NUMBER packets
-  
+
   -n, --numeric              do not resolve host addresses
   -r, --ignore-routing       send directly to a host on an attached network
       --ttl=N                specify N as time-to-live
@@ -138,7 +138,7 @@ Diffically, not like TCP and UDP, there's no port to tell in ICMP.
 #### The ICMP Echo message format
 
 - Type (1 byte): what kind of message this is (`8` = Echo Request, `0` = Echo Reply)
-- Code (1 byte): a sub-type. It is 0 for echo messages.
+- Code (1 byte): a sub-type. It is `0` for echo messages.
 - Checksum (2 byte): detects corruption. It is computed over the whole ICMP message (header + data).
 - Identifier (2 bytes): a value you choose to identify your ping session. The destination copies it into the reply.
 - Sequence (2 bytes): a counter, incremented with each packet sent. It is also copied into the reply.
@@ -175,7 +175,7 @@ int fd = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
 
 ```c
 ssize_t sendto(int sockfd,
-                const void buf[.len], 
+                const void buf[.len],
                 size_t len,
                 int flags,
                 const struct sockaddr *dest_addr,
@@ -204,12 +204,12 @@ Instead of "root can do everything", Linux splits root's powers into pieces.
 #### Check the knowledge
 
 1. Your raw socket receives every ICMP packet arriving on the machine. What will you check in each received packet to decide "this reply is mine"?
--> Check the type first, then the identifier (and sequence for matching), and the location of the identifier depends on the type.
+   -> Check the type first, then the identifier (and sequence for matching), and the location of the identifier depends on the type.
 
 2. When you call `recvfrom()`, what comes first in your buffer before the ICMP header, and how do you find where the ICMP header starts?
--> IP header. Because 84 bytes received = 20 (IP header) + 8 (ICMP header) + 56 (ICMP data)
+   -> IP header. Because 84 bytes received = 20 (IP header) + 8 (ICMP header) + 56 (ICMP data)
 
-### Build Echo Request
+### 1 - Build Echo Request
 
 #### Layout
 
@@ -319,5 +319,42 @@ struct icmp
 #define	icmp_mask	icmp_dun.id_mask
 #define	icmp_data	icmp_dun.id_data
 };
+```
 
+#### Byte order
 
+- Byte order (endianness) is the order in which a multi-byte number is stored in memory.
+
+- x86 machines store the low-order byte first (little-endian). Network protocols are defined with the high-order byte first (big-endian).
+
+#### The checksum
+
+Purpose: The receiver recomputes it to detect corrupted packets. A packet with a wrong checksum is silenty dropped. That means a broken checksum looks exactly like "the host doesn't answer".
+
+The algorithm:
+- Set the checksum field to 0 first.
+- Treat the whole ICMP message (header + data) as a sequence of 16-bit words and add them together in a 32-bit accumulator.
+- If there's one leftover byte (odd length), add it too, as if padded with a zero byte.
+- "Fold" the carries: while the accumulator has bits above the low 16, add the high part to the low part.
+- Take the one's complement (`~`) of the result and keep 16 bits. That's the checksum.
+
+A subtle but well-known property: this one's complement sum gives correct results regardless of the machine's byte order, as long as we read the 16-bit words directly from the packet's memory and store the result back the same way.
+
+#### The data part
+
+`inetutils` sends 56 data bytes by default. Since the destination echoes the data back unchanged, many implementations store the send time (`struct timeval` from ``gettimeofday()`) at the start of the data and fill the rest with a pattern.
+
+#### Sending it: `sendto()`
+
+```c
+ssize_t sendto(int sockfd,
+                const void *buf,
+                size_t len,
+                int flags,
+                const struct sockaddr *dest,
+                socklen_t dest_len);
+```
+
+- `buf`, `len`: your ICMP message only (64 bytes) with no IP header, because the kernel adds it.
+- `dest`: a `struct sockaddr_in` holding the destination IPv4 address. It's cast to the generic `struct sockaddr *` because `sendto()` works for every address family.
+- Return value: the number of bytes sent, or `-1` with `errno` set.
