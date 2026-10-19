@@ -323,6 +323,8 @@ struct icmp
 
 #### Byte order
 
+```man byteorder```
+
 - Byte order (endianness) is the order in which a multi-byte number is stored in memory.
 
 - x86 machines store the low-order byte first (little-endian). Network protocols are defined with the high-order byte first (big-endian).
@@ -358,3 +360,4 @@ ssize_t sendto(int sockfd,
 - `buf`, `len`: your ICMP message only (64 bytes) with no IP header, because the kernel adds it.
 - `dest`: a `struct sockaddr_in` holding the destination IPv4 address. It's cast to the generic `struct sockaddr *` because `sendto()` works for every address family.
 - Return value: the number of bytes sent, or `-1` with `errno` set.
+

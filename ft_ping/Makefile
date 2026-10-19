@@ -1,3 +1,15 @@
+# **************************************************************************** #
+#                                                                              #
+#                                                         :::      ::::::::    #
+#    Makefile                                           :+:      :+:    :+:    #
+#                                                     +:+ +:+         +:+      #
+#    By: tat-nguy <tat-nguy@student.42.fr>          +#+  +:+       +#+         #
+#                                                 +#+#+#+#+#+   +#+            #
+#    Created: 2026/10/19 21:54:58 by tat-nguy          #+#    #+#              #
+#    Updated: 2026/10/19 23:18:58 by tat-nguy         ###   ########.fr        #
+#                                                                              #
+# **************************************************************************** #
+
 # ***** Color Definition ***** #
 
 RED 	= \033[91m
@@ -9,48 +21,38 @@ RESET 	= \033[0m
 
 NAME = ft_ping
 
-# Libft
-LIBFT_DIR	= ./libft
-LIBFT		= $(LIBFT_DIR)/libft.a
-
 # Source Files
-SRC     	= src/main/animation.c src/main/main.c \
-				src/parsing/error_map.c \
-				src/parsing/free_map.c \
+SRC   		= src/main.c \
+						src/parse.c \
+						src/print.c \
 				
 # Object Files
 OBJS 		= $(SRC:.c=.o)
 
 # Include and Flags
+CC 				= cc
 INCLUDE 	= -Iincludes
-CFLAGS 		= -Wall -Wextra -Werror -I/usr/X11/include -g
-CC 			= cc
-RM			= rm -rf
-LIBFLAGS	= -L$(LIBFT_DIR) -lft
+CFLAGS 		= -Wall -Wextra -Werror
+RM				= rm -rf
 
 # Target
-all: $(LIBFT) $(NAME)
+all: $(NAME)
 
 %.o: %.c
 	@$(CC) $(CFLAGS) -c $< -o $@
 
-$(LIBFT):
-	@$(MAKE) -s -C $(LIBFT_DIR)
-
 $(NAME): $(OBJS)
 	@echo "$(YELLOW) 🛠️  waiting for compilation...$(RESET)"
-	@$(CC) $(OBJS) -o $(NAME) $(INCLUDE) $(CFLAGS) $(LIBFLAGS) -lm
+	@$(CC) $(OBJS) -o $(NAME) $(INCLUDE) $(CFLAGS)
 	@echo "$(GREEN) 🤖  Compiled successful ✴️  $(NAME) ✴️$(RESET)"
 	
 # Clean
 clean:
 	@$(RM) $(OBJS)
-	@$(MAKE) -s -C $(LIBFT_DIR) clean
 	@echo "$(RED) 🗑️  Deleted object files.$(RESET)"
 
 fclean: clean
 	@$(RM) $(NAME)
-	@$(MAKE) -s -C $(LIBFT_DIR) fclean
 	@echo "$(RED) 🚽  Deleted ❄️  $(NAME) ❄️$(RESET)"
 
 re: fclean all
@@ -58,4 +60,3 @@ re: fclean all
 bonus: re
 
 .PHONY: all clean fclean re bonus
-

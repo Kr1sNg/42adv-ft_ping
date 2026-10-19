@@ -1,5 +1,17 @@
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   permission_error.c                                 :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: tat-nguy <tat-nguy@student.42.fr>          +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2026/10/19 17:19:08 by tat-nguy          #+#    #+#             */
+/*   Updated: 2026/10/19 21:54:37 by tat-nguy         ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
 #include <errno.h>
-#include <netinet/in.h>
+#include <netinet/in.h>s
 #include <stdio.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -19,17 +31,21 @@ int main(void)
 
     while (1)
     {
-      ssize_t bytes_received = recvfrom(fd, buffer, sizeof(buffer), 0, NULL, NULL);
-      if (bytes_received < 0)
-      {
-        printf("received %zd bytes, first byte=0x%02x, byte[20]=0x%02x\n", bytes_received, buffer[0], buffer[20]);
-      }
-      else
-      {
-        printf("received %zd bytes, first byte=0x%02x, but packet is too short for byte[20]\n", bytes_received, buffer[0]);
-      }
+        ssize_t bytes_received =
+            recvfrom(fd, buffer, sizeof(buffer), 0, NULL, NULL);
+        if (bytes_received < 0)
+        {
+            printf("received %zd bytes, first byte=0x%02x, byte[20]=0x%02x\n",
+                   bytes_received, buffer[0], buffer[20]);
+        }
+        else
+        {
+            printf("received %zd bytes, first byte=0x%02x, but packet is too "
+                   "short for byte[20]\n",
+                   bytes_received, buffer[0]);
+        }
     }
-    
+
     close(fd);
     return 0;
 }
