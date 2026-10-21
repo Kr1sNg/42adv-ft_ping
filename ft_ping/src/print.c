@@ -6,7 +6,7 @@
 /*   By: tat-nguy <tat-nguy@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/10/19 17:18:54 by tat-nguy          #+#    #+#             */
-/*   Updated: 2026/10/19 23:23:12 by tat-nguy         ###   ########.fr       */
+/*   Updated: 2026/10/20 10:48:04 by tat-nguy         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -66,7 +66,7 @@ void print_help(const char *prog_name)
         prog_name);
 }
 
-void print_error(const char *prog_name)
+void print_help_more(const char *prog_name)
 {
     fprintf(stderr, "Try `%s -?` for more information.\n", prog_name);
 }

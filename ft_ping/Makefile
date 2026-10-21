@@ -6,7 +6,7 @@
 #    By: tat-nguy <tat-nguy@student.42.fr>          +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2026/10/19 21:54:58 by tat-nguy          #+#    #+#              #
-#    Updated: 2026/10/19 23:18:58 by tat-nguy         ###   ########.fr        #
+#    Updated: 2026/10/20 13:51:42 by tat-nguy         ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
@@ -25,6 +25,8 @@ NAME = ft_ping
 SRC   		= src/main.c \
 						src/parse.c \
 						src/print.c \
+						src/resolve.c \
+						src/icmp.c \
 				
 # Object Files
 OBJS 		= $(SRC:.c=.o)
