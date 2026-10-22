@@ -261,7 +261,7 @@ struct icmp
   uint16_t icmp_cksum;	/* ones complement checksum of struct */
   union
   {
-    unsigned char ih_pptr;	/* ICMP_PARAMPROB */
+    uint8_t ih_pptr;	/* ICMP_PARAMPROB */
     struct in_addr ih_gwaddr;	/* gateway address */
     struct ih_idseq		/* echo datagram */
     {
@@ -323,7 +323,7 @@ struct icmp
 
 #### Byte order
 
-```man byteorder```
+`man byteorder`
 
 - Byte order (endianness) is the order in which a multi-byte number is stored in memory.
 
@@ -334,6 +334,7 @@ struct icmp
 Purpose: The receiver recomputes it to detect corrupted packets. A packet with a wrong checksum is silenty dropped. That means a broken checksum looks exactly like "the host doesn't answer".
 
 The algorithm:
+
 - Set the checksum field to 0 first.
 - Treat the whole ICMP message (header + data) as a sequence of 16-bit words and add them together in a 32-bit accumulator.
 - If there's one leftover byte (odd length), add it too, as if padded with a zero byte.
@@ -360,4 +361,3 @@ ssize_t sendto(int sockfd,
 - `buf`, `len`: your ICMP message only (64 bytes) with no IP header, because the kernel adds it.
 - `dest`: a `struct sockaddr_in` holding the destination IPv4 address. It's cast to the generic `struct sockaddr *` because `sendto()` works for every address family.
 - Return value: the number of bytes sent, or `-1` with `errno` set.
-

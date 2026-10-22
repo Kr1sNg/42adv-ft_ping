@@ -6,7 +6,7 @@
 #    By: tat-nguy <tat-nguy@student.42.fr>          +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2026/10/19 21:54:58 by tat-nguy          #+#    #+#              #
-#    Updated: 2026/10/20 13:51:42 by tat-nguy         ###   ########.fr        #
+#    Updated: 2026/10/21 23:19:01 by tat-nguy         ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
@@ -27,6 +27,7 @@ SRC   		= src/main.c \
 						src/print.c \
 						src/resolve.c \
 						src/icmp.c \
+						src/time.c \
 				
 # Object Files
 OBJS 		= $(SRC:.c=.o)

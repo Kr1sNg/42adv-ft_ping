@@ -6,7 +6,7 @@
 /*   By: tat-nguy <tat-nguy@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/10/19 17:18:54 by tat-nguy          #+#    #+#             */
-/*   Updated: 2026/10/20 10:48:04 by tat-nguy         ###   ########.fr       */
+/*   Updated: 2026/10/22 18:03:49 by tat-nguy         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -69,4 +69,16 @@ void print_help(const char *prog_name)
 void print_help_more(const char *prog_name)
 {
     fprintf(stderr, "Try `%s -?` for more information.\n", prog_name);
+}
+
+void report_ignored_packet(bool verbose, const char *reason)
+{
+    if (verbose)
+        fprintf(stderr, "ft_ping: ignored packet: %s\n", reason);
+}
+
+void print_reply(const t_ping_reply *reply, uint16_t sequence, double rtt_ms)
+{
+    printf("%zy bytes from %s: icmp_seq=%u ttl=%u time=%.3f ms\n", reply->size,
+           reply->src_ip, sequence, reply->ttl, rtt_ms);
 }

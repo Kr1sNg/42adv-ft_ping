@@ -6,7 +6,7 @@
 /*   By: tat-nguy <tat-nguy@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/10/19 17:18:54 by tat-nguy          #+#    #+#             */
-/*   Updated: 2026/10/20 11:48:20 by tat-nguy         ###   ########.fr       */
+/*   Updated: 2026/10/21 23:01:01 by tat-nguy         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -30,10 +30,11 @@ int resolve_dest(const char *dest, struct sockaddr_in *addr, char *ip_str,
         return (-1);
     }
     
-    if (result->ai_addrlen < sizeof(*addr))
+    if (result == NULL || result->ai_addrlen < sizeof(*addr))
     {
-        fprintf(stderr, "ft_ping: invalid IPv4 address result\n");
-        freeaddrinfo(result);
+        fprintf(stderr, "ft_ping: could not resolve %s\n", dest);
+        if (result != NULL)
+            freeaddrinfo(result);
         return (-1);
     }
 
