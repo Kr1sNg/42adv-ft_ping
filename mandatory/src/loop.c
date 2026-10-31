@@ -30,7 +30,7 @@ void handle_reply(const t_ping_context *context, t_ping_stats *stats, t_ping_rep
     bool duplicate;
     (void)context;
 
-    if (reply->kind == REPLY_ERROR)
+    if (reply->is_error)
     {
         printf("ft_ping: reply error");
         return;

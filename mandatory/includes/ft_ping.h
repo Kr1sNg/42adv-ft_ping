@@ -33,7 +33,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#define _POSIX_C_SOURCE 200112L
+// #define _POSIX_C_SOURCE 200112L
 #define PING_PAYLOAD_SIZE 56
 #define PING_INTERVAL_MS 1000 /* time between two requests */
 #define RECV_BUFFER_SIZE 65536
