@@ -6,152 +6,142 @@
 /*   By: tat-nguy <tat-nguy@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/10/23 12:11:06 by tat-nguy          #+#    #+#             */
-/*   Updated: 2026/10/23 16:22:36 by tat-nguy         ###   ########.fr       */
+/*   Updated: 2026/11/08 17:02:31 by tat-nguy         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
+// A raw ICMP socket receives EVERY ICMP packet reaching the machine
+// (our own requests on loopback, other ping processes...). We keep only:
+//   - an Echo Reply carrying our identifier
+//   - an ICMP error whose embedded packet carries our identifier:
+//     [ICMP error header (8)][our IP header][our ICMP header (8)]
+
 #include "../includes/ft_ping.h"
 
-int validate_ip_header(const unsigned char *buffer, size_t received_size,
-                       size_t *header_size, size_t *total_length)
+// Wait until the socket is readable or next_send_ms is reached.
+// Returns 1 (readable), 0 (next_send_ms or Ctrl-C) or -1 (error).
+static int wait_for_packet(int sockfd, double next_send_ms)
 {
-    struct iphdr header;
+    double remaining_ms = next_send_ms - now_ms();
+    if (remaining_ms <= 0.0)
+        return (0);
 
-    if (received_size < sizeof(header))
-        return (1);
+    struct timeval timeout;
+    timeout.tv_sec = (time_t)(remaining_ms / 1000.0);
+    timeout.tv_usec =
+        (suseconds_t)((remaining_ms - timeout.tv_sec * 1000.0) * 1000.0);
 
-    memcpy(&header, buffer, sizeof(header));
-    if (header.version != 4 || header.protocol != IPPROTO_ICMP)
-        return (1);
-    *header_size = (size_t)header.ihl * 4;
-    if (*header_size < sizeof(header) || *header_size > received_size)
-        return (1);
-    *total_length = (size_t)ntohs(header.tot_len);
-    if (*total_length > received_size)
-        *total_length = received_size;
-    if (*total_length < *header_size + sizeof(struct icmphdr))
-        return 1;
-    return 0;
-}
+    fd_set read_fds;
+    FD_ZERO(&read_fds);
+    FD_SET(sockfd, &read_fds);
 
-int validate_icmp_error(const unsigned char *icmp, size_t icmp_size,
-                        const t_recv_config *config, t_ping_reply *reply)
-{
-    const struct ip *original_ip;
-    struct icmphdr original_icmp;
-    size_t original_header_size;
-
-    if (icmp_size < 2 * sizeof(struct icmphdr) + sizeof(struct iphdr))
-        return 1;
-    original_ip = (const struct ip *)(icmp + sizeof(struct icmphdr));
-    original_header_size = (size_t)(icmp[sizeof(struct icmphdr)] & 0x0f) * 4;
-    if (icmp_size < 2 * sizeof(struct icmphdr) + original_header_size)
-        return 1;
-    memcpy(&original_icmp, icmp + sizeof(struct icmphdr) + original_header_size,
-           sizeof(original_icmp));
-    if (ntohs(original_icmp.un.echo.id) != config->identifier)
-        return 1;
-    reply->kind = REPLY_ERROR;
-    reply->original_ip = original_ip;
-    return 0;
-}
-
-bool is_error_type(int type)
-{
-    return type == ICMP_DEST_UNREACH || type == ICMP_TIME_EXCEEDED ||
-           type == ICMP_SOURCE_QUENCH || type == ICMP_REDIRECT ||
-           type == ICMP_PARAMETERPROB;
-}
-
-int validate_icmp_reply(const unsigned char *buffer, size_t header_size,
-                        size_t total_length, const t_recv_config *config,
-                        t_ping_reply *reply)
-{
-    size_t icmp_size = total_length - header_size;
-    struct icmphdr header;
-
-    memcpy(&header, buffer + header_size, sizeof(header));
-    reply->icmp_type = header.type;
-    reply->icmp_code = header.code;
-    if (is_error_type(header.type))
-        return validate_icmp_error(buffer + header_size, icmp_size, config,
-                                   reply);
-    if (header.type != ICMP_ECHOREPLY || header.code != 0)
-        return 1;
-    if (ntohs(header.un.echo.id) != config->identifier)
-        return 1;
-    if (calculate_checksum(buffer + header_size, icmp_size) != 0)
-        return 1;
-    reply->kind = REPLY_ECHO;
-    reply->sequence = ntohs(header.un.echo.sequence);
-    return 0;
-}
-
-int extract_reply(const unsigned char *buffer, size_t header_size,
-                  size_t total_length, const struct sockaddr_in *sender,
-                  t_ping_reply *reply)
-{
-    struct iphdr header;
-
-    memcpy(&header, buffer, sizeof(header));
-    if (inet_ntop(AF_INET, &sender->sin_addr, reply->src_ip,
-                  sizeof(reply->src_ip)) == NULL)
+    int result = select(sockfd + 1, &read_fds, NULL, NULL, &timeout);
+    if (result == -1 && errno != EINTR)
     {
-        fprintf(stderr, "ft_ping: inet_ntop: %s\n", strerror(errno));
+        fprintf(stderr, "ft_ping: select: %s\n", strerror(errno));
         return (-1);
     }
-    reply->ttl = header.ttl;
-    reply->size = total_length - header_size;
-    return (0);
+    return (result > 0);
 }
 
-int wait_for_packet(int sockfd, double deadline_ms)
+// Is this an Echo Reply to one of our requests? If so, compute its RTT
+// (Round-Trip Time).
+static bool parse_echo_reply(const unsigned char *icmp, size_t icmp_size,
+                             uint16_t identifier, t_ping_reply *reply)
 {
-    struct timeval timeout;
-    fd_set read_fds;
-    int remaining;
-    int result;
+    struct icmphdr header;
+    memcpy(&header, icmp, sizeof(header));
 
-    while (!g_stop)
-    {
-        remaining = get_remaining_time(deadline_ms, &timeout);
-        if (remaining <= 0)
-            return remaining;
-        FD_ZERO(&read_fds);
-        FD_SET(sockfd, &read_fds);
-        result = select(sockfd + 1, &read_fds, NULL, NULL, &timeout);
-        if (result > 0)
-            return 1;
-        if (result == 0)
-            continue;
-        if (errno != EINTR)
-        {
-            perror("ft_ping: select");
-            return -1;
-        }
-    }
-    return 2;
+    struct timespec sent;
+    if (ntohs(header.un.echo.id) != identifier ||
+        icmp_size < sizeof(header) + sizeof(sent) ||
+        calculate_checksum(icmp, icmp_size) != 0)
+        return (false);
+
+    memcpy(&sent, icmp + sizeof(header), sizeof(sent));
+    reply->is_error = false;
+    reply->sequence = ntohs(header.un.echo.sequence);
+    reply->rtt_ms = now_ms() - timespec_to_ms(&sent);
+    return (true);
 }
 
-int recv_echo_reply(const t_recv_config *config, t_ping_reply *reply)
+// Is this ICMP error caused by one of our requests? true -> error caused our
+// req
+static bool parse_echo_error(const unsigned char *icmp, size_t icmp_size,
+                             uint16_t identifier, t_ping_reply *reply)
+{
+    if (icmp_size < 2 * sizeof(struct icmphdr) + sizeof(struct ip))
+        return (false);
+
+    const struct ip *original_ip =
+        (const struct ip *)(icmp + sizeof(struct icmphdr));
+    size_t original_header_size = (size_t)original_ip->ip_hl * 4;
+    if (icmp_size < 2 * sizeof(struct icmphdr) + original_header_size)
+        return (false);
+
+    struct icmphdr original_icmp;
+    memcpy(&original_icmp, icmp + sizeof(struct icmphdr) + original_header_size,
+           sizeof(original_icmp));
+
+    if (ntohs(original_icmp.un.echo.id) != identifier)
+        return (false);
+
+    reply->is_error = true;
+    reply->original_ip = original_ip;
+    return (true);
+}
+
+// Look at one recieved packet: true if it's belong to us (reply is filled)
+static bool parse_packet(const unsigned char *buffer, size_t size,
+                         uint16_t identifier, t_ping_reply *reply)
+{
+    if (size < sizeof(struct ip))
+        return (false);
+
+    bool is_ours = false;
+    const struct ip *ip = (const struct ip *)buffer;
+    size_t header_size = (size_t)ip->ip_hl * 4;
+    if (header_size < sizeof(struct ip) ||
+        size < header_size + sizeof(struct icmphdr))
+        return (false);
+
+    const unsigned char *icmp = buffer + header_size;
+    reply->icmp_type = icmp[0];
+    reply->icmp_code = icmp[1];
+    if (icmp[0] == ICMP_ECHOREPLY)
+        is_ours = parse_echo_reply(icmp, size - header_size, identifier, reply);
+    else if (icmp[0] == ICMP_DEST_UNREACH || icmp[0] == ICMP_TIME_EXCEEDED)
+        is_ours = parse_echo_error(icmp, size - header_size, identifier, reply);
+    else
+        is_ours = false;
+
+    if (!is_ours)
+        return (false);
+
+    inet_ntop(AF_INET, &ip->ip_src, reply->src_ip, sizeof(reply->src_ip));
+    reply->ttl = ip->ip_ttl;
+    reply->size = size - header_size;
+    return (true);
+}
+
+// Wait until deadline_ms for ONE packet that belongs to us.
+// Returns 1 (reply filled), 0 (next_send_ms or Ctrl-C) or -1 (error).
+// The buffer is static: reply->original_ip stays valid until the next call.
+int recv_echo_reply(int sockfd, uint16_t identifier, double next_send_ms,
+                    t_ping_reply *reply)
 {
     static unsigned char buffer[RECV_BUFFER_SIZE];
-    struct sockaddr_in sender = {0};
-    socklen_t sender_length = sizeof(sender);
-    size_t received_size = 0;
-    size_t header_size = 0;
-    size_t total_length = 0;
     ssize_t bytes_received = 0;
     int result = 0;
 
     while (!g_stop)
     {
-        result = wait_for_packet(config->sockfd, config->deadline_ms);
+        result = wait_for_packet(sockfd, next_send_ms);
         if (result != 1)
-            return result == 0 ? 1 : result;
+            return (result);
 
-        bytes_received = recvfrom(config->sockfd, buffer, sizeof(buffer), 0,
-                                  (struct sockaddr *)&sender, &sender_length);
+        bytes_received =
+            recvfrom(sockfd, buffer, sizeof(buffer), 0, NULL, NULL);
         if (bytes_received == -1)
         {
             if (errno == EINTR)
@@ -159,15 +149,8 @@ int recv_echo_reply(const t_recv_config *config, t_ping_reply *reply)
             fprintf(stderr, "ft_ping: recvfrom: %s\n", strerror(errno));
             return (-1);
         }
-        received_size = (size_t)bytes_received;
-        if (validate_ip_header(buffer, received_size, &header_size,
-                               &total_length) != 0)
-            continue;
-        if (validate_icmp_reply(buffer, header_size, total_length, config,
-                                reply) != 0)
-            continue;
-        extract_rtt(buffer + header_size, total_length - header_size, reply);
-        return extract_reply(buffer, header_size, total_length, &sender, reply);
+        if (parse_packet(buffer, (size_t)bytes_received, identifier, reply))
+            return (1);
     }
-    return 2;
+    return (0);
 }

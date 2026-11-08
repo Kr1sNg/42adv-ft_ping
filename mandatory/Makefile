@@ -6,7 +6,7 @@
 #    By: tat-nguy <tat-nguy@student.42.fr>          +#+  +:+       +#+         #
 #                                                 +#+#+#+#+#+   +#+            #
 #    Created: 2026/10/19 21:54:58 by tat-nguy          #+#    #+#              #
-#    Updated: 2026/10/23 16:45:41 by tat-nguy         ###   ########.fr        #
+#    Updated: 2026/11/08 17:05:56 by tat-nguy         ###   ########.fr        #
 #                                                                              #
 # **************************************************************************** #
 
@@ -27,7 +27,6 @@ LIBFT			= $(LIBFT_DIR)/libft.a
 
 # Source Files
 SRC   		= src/main.c \
-						src/icmp.c \
 						src/loop.c \
 						src/network.c \
 						src/parse.c \

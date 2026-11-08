@@ -6,7 +6,7 @@
 /*   By: tat-nguy <tat-nguy@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/10/19 17:18:54 by tat-nguy          #+#    #+#             */
-/*   Updated: 2026/10/23 09:23:11 by tat-nguy         ###   ########.fr       */
+/*   Updated: 2026/11/08 17:03:39 by tat-nguy         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -15,27 +15,16 @@
 int resolve_dest(const char *dest, struct sockaddr_in *addr, char *ip_str,
                  size_t ip_str_size)
 {
-    struct addrinfo hints;
-    struct addrinfo *result;
-    int status;
+    struct addrinfo hints = {0};
+    struct addrinfo *result = NULL;
 
-    memset(&hints, 0, sizeof(hints));
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_DGRAM;
 
-    result = NULL;
-    status = getaddrinfo(dest, NULL, &hints, &result);
+    int status = getaddrinfo(dest, NULL, &hints, &result);
     if (status != 0)
     {
         fprintf(stderr, "ft_ping: unknown host\n");
-        return (-1);
-    }
-
-    if (result == NULL || result->ai_addrlen < sizeof(*addr))
-    {
-        fprintf(stderr, "ft_ping: unknown host\n");
-        if (result != NULL)
-            freeaddrinfo(result);
         return (-1);
     }
 
