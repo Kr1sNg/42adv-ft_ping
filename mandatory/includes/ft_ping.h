@@ -6,7 +6,7 @@
 /*   By: tat-nguy <tat-nguy@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/10/19 16:46:59 by tat-nguy          #+#    #+#             */
-/*   Updated: 2026/11/08 17:32:18 by tat-nguy         ###   ########.fr       */
+/*   Updated: 2026/11/08 17:45:25 by tat-nguy         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -19,14 +19,17 @@
 #include <arpa/inet.h>
 #include <errno.h>
 #include <netdb.h>
+#include <netinet/ip.h>
 #include <netinet/ip_icmp.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/select.h>
 #include <sys/socket.h>
 #include <time.h>
+#include <unistd.h>
 
 #define PING_PAYLOAD_SIZE 56
 #define PING_INTERVAL_MS 1000 /* time between two requests */

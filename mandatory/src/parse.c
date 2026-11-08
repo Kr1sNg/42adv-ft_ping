@@ -6,7 +6,7 @@
 /*   By: tat-nguy <tat-nguy@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/10/19 17:18:54 by tat-nguy          #+#    #+#             */
-/*   Updated: 2026/11/08 17:03:09 by tat-nguy         ###   ########.fr       */
+/*   Updated: 2026/11/08 18:15:18 by tat-nguy         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -29,9 +29,17 @@ int parse_args(int ac, char **av, t_ping_option *op)
         {
             op->verbose = true;
         }
+        else if (av[i][0] == '-' && av[i][1] == '-')
+        {
+            fprintf(stderr, "%s: unrecognized option '%s'\n", av[0], av[i]);
+            fprintf(stderr, "Try '%s --help' for more information.\n", av[0]);
+            return (-1);
+        }
         else if (av[i][0] == '-')
         {
-            fprintf(stderr, "%s: invalid option -- '%s'\n", av[0], av[i]);
+            if (strlen(av[i]) == 1)
+                return (0);
+            fprintf(stderr, "%s: invalid option -- '%s'\n", av[0], av[i][1]);
             fprintf(stderr, "Try '%s --help' for more information.\n", av[0]);
             return (-1);
         }
@@ -49,7 +57,7 @@ int parse_args(int ac, char **av, t_ping_option *op)
     }
     if (op->dest == NULL)
     {
-        fprintf(stderr, "%s: ft_ping: missing host operand\n", av[0]);
+        fprintf(stderr, "%s: missing host operand\n", av[0]);
         fprintf(stderr, "Try '%s --help' for more information.\n", av[0]);
         return (-1);
     }
