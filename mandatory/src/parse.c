@@ -6,7 +6,7 @@
 /*   By: tat-nguy <tat-nguy@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/10/19 17:18:54 by tat-nguy          #+#    #+#             */
-/*   Updated: 2026/11/08 18:15:18 by tat-nguy         ###   ########.fr       */
+/*   Updated: 2026/11/08 20:02:33 by tat-nguy         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -39,7 +39,7 @@ int parse_args(int ac, char **av, t_ping_option *op)
         {
             if (strlen(av[i]) == 1)
                 return (0);
-            fprintf(stderr, "%s: invalid option -- '%s'\n", av[0], av[i][1]);
+            fprintf(stderr, "%s: invalid option -- '%c'\n", av[0], av[i][1]);
             fprintf(stderr, "Try '%s --help' for more information.\n", av[0]);
             return (-1);
         }
