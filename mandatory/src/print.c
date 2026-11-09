@@ -6,7 +6,7 @@
 /*   By: tat-nguy <tat-nguy@student.42.fr>          +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2026/10/19 17:18:54 by tat-nguy          #+#    #+#             */
-/*   Updated: 2026/11/08 17:15:04 by tat-nguy         ###   ########.fr       */
+/*   Updated: 2026/11/09 12:08:18 by tat-nguy         ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -14,8 +14,7 @@
 
 void print_help(const char *prog_name)
 {
-    printf("    \n"
-           "Usage: %s [OPTION...] HOST ...\n"
+    printf("Usage: %s [OPTION...] HOST ...\n"
            "Send ICMP ECHO_REQUEST packets to network hosts.\n"
            "\n"
            " Options valid for all request types:\n"
@@ -109,8 +108,8 @@ void print_stats(const t_ping_context *context, const t_ping_stats *stats)
     if (stats->duplicates > 0)
         printf("+%lu duplicates, ", stats->duplicates);
     if (stats->transmitted > 0 && stats->received <= stats->transmitted)
-        printf("%lu%% packet loss",
-               (stats->transmitted - stats->received) * 100 / stats->transmitted);
+        printf("%lu%% packet loss", (stats->transmitted - stats->received) *
+                                        100 / stats->transmitted);
     printf("\n");
     if (stats->received > 0)
     {
