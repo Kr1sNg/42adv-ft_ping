@@ -1,363 +1,317 @@
-# ft_ping
+# 🏓 ft_ping 🏓
 
-Re-coding the ping command will allow you to become acquainted with raw IP communication between two machines on a network.
+A from-scratch reimplementation of `ping` in C, modelled on **GNU inetutils 2.0**.
+It sends ICMP Echo Requests over a raw IPv4 socket, matches the replies to its own requests, measures the round-trip time (RTT), and prints the same output and statistics as the reference.
 
-## Introduction
+> 42 School project (advanced network branch). This README covers the **mandatory part** only.
 
-**Ping** is the name of a command that allows you to test the accessibility of another machine through the IP network. The command also measures the time taken to receive a response, called the round-trip time.
+---
 
-### Requirements
+## Table of contents
 
-- A C program named `ft_ping`, with a `Makefile` (usual rules, no unnecessary relinking).
-- The reference behavior is ping from `inetutils-2.0` (check it with `ping -V`).
-- Mandatory options: `-v` (verbose) and `-?` (help).
-- The argument is a single IPv4 target, either an address (`8.8.8.8`) or a hostname (`google.com`).
-- FQDN handling without DNS resolution on the packet return.
-- No crashes (segfault, double free, etc.), and errors must be handled carefully.
-- Output must have indentation identical to `inetutils-2.0`, except for the RTT line and the reverse DNS part.
-- A ±30 ms delay is tolerated on packet reception.
-- You may not call the system ping or reuse its sources.
-- Additional `-f` `-l` `-n` `-w` `-W` `-p` `-r` `-s` `-T` `--ttl` `--ip-timestamp` flags
+- [Quick start](#quick-start)
+- [Usage](#usage)
+- [Example output](#example-output)
+- [How it works](#how-it-works)
+  - [Program flow](#program-flow)
+  - [Building the Echo Request](#building-the-echo-request)
+  - [The Internet checksum](#the-internet-checksum)
+  - [Receiving and filtering](#receiving-and-filtering)
+  - [Timing model](#timing-model)
+  - [RTT and statistics](#rtt-and-statistics)
+  - [Signal handling](#signal-handling)
+- [Project layout](#project-layout)
+- [Error handling and exit codes](#error-handling-and-exit-codes)
+- [Differences from inetutils 2.0](#differences-from-inetutils-20)
+- [Testing](#testing)
+- [References](#references)
 
-### What happens when you run ft_ping ?
+---
 
-```text
-parse arguments (-v, -?, target)
-        ↓
-resolve "google.com" → IPv4 address
-        ↓
-create a raw socket (requires privileges → why?)
-        ↓
-loop, once per second:
-    build ICMP Echo Request (type, code, id, sequence, timestamp, checksum)
-        ↓
-    sendto() → kernel adds IP header → network → destination
-        ↓
-    destination answers with ICMP Echo Reply
-        ↓
-    recvfrom() → you receive IP header + ICMP
-        ↓
-    check: is this reply MINE? (id, sequence)
-        ↓
-    compute RTT, print a line
-        ↓
-Ctrl+C (SIGINT) → print statistics (sent, received, loss %, min/avg/max/stddev)
-```
-
-### Observe the reference
+## Quick start
 
 ```sh
-tat-nguy😺vmdeb12:~ $ ping -V
-ping (GNU inetutils) 2.0
+make                         # builds ./ft_ping
+sudo ./ft_ping 8.8.8.8       # raw sockets need privileges
+```
 
-tat-nguy😺vmdeb12:~ $ ping -c 4 127.0.0.1
-PING 127.0.0.1 (127.0.0.1): 56 data bytes
-64 bytes from 127.0.0.1: icmp_seq=0 ttl=64 time=0.117 ms
-64 bytes from 127.0.0.1: icmp_seq=1 ttl=64 time=0.053 ms
-64 bytes from 127.0.0.1: icmp_seq=2 ttl=64 time=0.032 ms
-64 bytes from 127.0.0.1: icmp_seq=3 ttl=64 time=0.046 ms
---- 127.0.0.1 ping statistics ---
-4 packets transmitted, 4 packets received, 0% packet loss
-round-trip min/avg/max/stddev = 0.032/0.062/0.117/0.033 ms
+To run it without `sudo`, give the binary the one capability it needs:
 
-tat-nguy😺vmdeb12:~ $ ping -c 3 google.com
-PING google.com (172.217.22.78): 56 data bytes
-64 bytes from 172.217.22.78: icmp_seq=0 ttl=255 time=28.869 ms
-64 bytes from 172.217.22.78: icmp_seq=1 ttl=255 time=34.343 ms
-64 bytes from 172.217.22.78: icmp_seq=2 ttl=255 time=30.006 ms
---- google.com ping statistics ---
-3 packets transmitted, 3 packets received, 0% packet loss
-round-trip min/avg/max/stddev = 28.869/31.073/34.343/2.359 ms
+```sh
+sudo setcap cap_net_raw+ep ./ft_ping
+./ft_ping google.com
+```
 
-tat-nguy😺vmdeb12:~ $ ping -?
-Usage: ping [OPTION...] HOST ...
+Makefile rules: `all`, `clean`, `fclean`, `re`. Compiled with `cc -Wall -Wextra -Werror`.
+
+**Requirements:** Linux, a C compiler, `make`. Tested on Debian 12.
+
+---
+
+## Usage
+
+```text
+Usage: ft_ping [OPTION...] HOST ...
 Send ICMP ECHO_REQUEST packets to network hosts.
 
- Options controlling ICMP request types:
-      --echo                 send ICMP_ECHO packets (default)
-  -t, --type=TYPE            send TYPE packets
-
  Options valid for all request types:
-
-  -c, --count=NUMBER         stop after sending NUMBER packets
-
-  -n, --numeric              do not resolve host addresses
-  -r, --ignore-routing       send directly to a host on an attached network
-      --ttl=N                specify N as time-to-live
-  -T, --tos=NUM              set type of service (TOS) to NUM
   -v, --verbose              verbose output
-  -w, --timeout=N            stop after N seconds
-  -W, --linger=N             number of seconds to wait for response
-
- Options valid for --echo requests:
-
-  -f, --flood                flood ping (root only)
-      --ip-timestamp=FLAG    IP timestamp of type FLAG, which is one of
-                             "tsonly" and "tsaddr"
-  -l, --preload=NUMBER       send NUMBER packets as fast as possible before
-                             falling into normal mode of behavior (root only)
-  -p, --pattern=PATTERN      fill ICMP packet with given pattern (hex)
-  -s, --size=NUMBER          send NUMBER data octets
 
   -?, --help                 give this help list
-      --usage                give a short usage message
-  -V, --version              print program version
-
-tat-nguy😺vmdeb12:~ $ ping -v -c 3 google.com
-PING google.com (172.217.22.78): 56 data bytes, id 0xf5c8 = 62920
-64 bytes from 172.217.22.78: icmp_seq=0 ttl=255 time=57.526 ms
-64 bytes from 172.217.22.78: icmp_seq=1 ttl=255 time=67.796 ms
-64 bytes from 172.217.22.78: icmp_seq=2 ttl=255 time=101.337 ms
---- google.com ping statistics ---
-3 packets transmitted, 3 packets received, 0% packet loss
-round-trip min/avg/max/stddev = 57.526/75.553/101.337/18.708 ms
-
-tat-nguy😺vmdeb12:~ $ ping --ttl=1 -v -c 3 google.com
-PING google.com (172.217.22.78): 56 data bytes, id 0xf5d0 = 62928
-64 bytes from 172.217.22.78: icmp_seq=0 ttl=255 time=30.565 ms
-64 bytes from 172.217.22.78: icmp_seq=1 ttl=255 time=46.379 ms
-64 bytes from 172.217.22.78: icmp_seq=2 ttl=255 time=112.038 ms
---- google.com ping statistics ---
-3 packets transmitted, 3 packets received, 0% packet loss
-round-trip min/avg/max/stddev = 30.565/62.994/112.038/35.275 ms
-
-tat-nguy😺vmdeb12:~ $ ping nonexistent.invalid
-ping: unknown host
 ```
 
-### ICMP - Internet Control Message Protocol
+| Option | Effect |
+|---|---|
+| `-v`, `--verbose` | Prints the ICMP identifier in the header line. For ICMP errors (Destination Unreachable, Time Exceeded), it also dumps the IP and ICMP headers of the request that caused the error. |
+| `-?`, `--help` | Prints the help text and exits with status `0`. |
 
-ICMP is the protocol that netwrok devices use to send each other control and error messages, such as "are you there?", "I'm here" or "I couldn't deliver your packet".
+`HOST` is a single IPv4 address (`8.8.8.8`) or a hostname / FQDN (`google.com`). The name is resolved **once**, before sending. Reply addresses are printed numerically, with no reverse DNS lookup.
 
-ICMP is defined in RFC 792, it lives at the network layer, alongside IP, and is carried inside IP packets. In the IP header, the protocol field is st to `1` to mean "the payload is ICMP".
+Stop with **Ctrl+C**. The statistics are printed on exit.
 
-`ping` is basically a program that sends one specific ICMP message (Echo Request) and waits for another (Echo Reply).
+---
 
-Diffically, not like TCP and UDP, there's no port to tell in ICMP.
+## Example output
 
-#### The ICMP Echo message format
+Loopback:
 
-- Type (1 byte): what kind of message this is (`8` = Echo Request, `0` = Echo Reply)
-- Code (1 byte): a sub-type. It is `0` for echo messages.
-- Checksum (2 byte): detects corruption. It is computed over the whole ICMP message (header + data).
-- Identifier (2 bytes): a value you choose to identify your ping session. The destination copies it into the reply.
-- Sequence (2 bytes): a counter, incremented with each packet sent. It is also copied into the reply.
-- Data: arbitrary bytes, also copied back by the destination. A common trick is to store the send time here, so the reply carries its own timestamp back to you.
-
-#### The error messages (`-v` verbose output)
-
-- Type `3`: Destination Unreachable: A router or host can't deliver the packet.
-- Type `11`: Time Exceeded: TTL reached 0 along the way.
-
-### Raw sockets and privileges
-
-#### Socket
-
-A socket is the door between your program and the kernel's networking stack. We write data into it to send and read data from it to receive.
-
-Normally the kernel does most of protocol work for us. With a TCP socket we hand over bytes, and the kernel builds the TCP and IP headers, handles retransmission, ordering, and ports.
-
-A raw socket skips the transport layer (TCP/UDP): we build the protocol message ourselves, and the kernel only handles IP.
-
--> ICMP isn't TCP or UDP, so there's no ICMP stream socket type. We need a socket that lets us write the ICMP header bytes ourselves.
-
-```c
-int fd = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
-
-// AF_INET: Address family: IPv4
-// SOCK_RAW: Socket type: raw (no transport layer handled by kernel)
-// IPPROTO_ICMP: Protocol number 1
+```text
+$ sudo ./ft_ping 127.0.0.1
+PING 127.0.0.1 (127.0.0.1): 56 data bytes
+64 bytes from 127.0.0.1: icmp_seq=0 ttl=64 time=0.042 ms
+64 bytes from 127.0.0.1: icmp_seq=1 ttl=64 time=0.072 ms
+64 bytes from 127.0.0.1: icmp_seq=2 ttl=64 time=0.065 ms
+64 bytes from 127.0.0.1: icmp_seq=3 ttl=64 time=0.068 ms
+^C--- 127.0.0.1 ft_ping statistics ---
+4 packets transmitted, 4 packets received, 0% packet loss
+round-trip min/avg/max/stddev = 0.042/0.062/0.072/0.012 ms
 ```
 
-#### What kernel actually does with a raw ICMP socket
+Verbose mode, with a hostname:
 
-- Sending: you pass the ICMP header + data to `sendto()`. The kernel adds the IP header itself (source address, TTL, protocol=1, IP checksum,...)
-
-```c
-ssize_t sendto(int sockfd,
-                const void buf[.len],
-                size_t len,
-                int flags,
-                const struct sockaddr *dest_addr,
-                socklen_t addrlen);
+```text
+$ sudo ./ft_ping -v localhost
+PING localhost (127.0.0.1): 56 data bytes, id 0x0126 = 294
+64 bytes from 127.0.0.1: icmp_seq=0 ttl=64 time=0.032 ms
+...
 ```
 
-- Receiving: `recvfrom()` gives you the full IP header + ICMP. That's the asymmetry, you send ICMP but recieve IP + ICMP. You must skip the IP header before reading the ICMP fields. Its length isn't always 20 bytes, so think about which IP header field tells you its real length.
+ICMP error with `-v`. Here a gateway reports the destination as unreachable, and ft_ping dumps the request that was rejected:
 
-```c
-ssize_t recvfrom(int sockfd,
-                  void buf[restrict .len],
-                  size_t len,
-                  int flags,
-                  struct sockaddr *_Nullable restrict src_addr,
-                  socklen_t *_Nullable restrict addrlen);
+```text
+$ sudo ./ft_ping -v 10.255.255.1
+PING 10.255.255.1 (10.255.255.1): 56 data bytes, id 0x0133 = 307
+92 bytes from 21.4.109.201: Destination Port Unreachable
+IP Hdr Dump:
+ 4500 0054 2072 4000 3e01 5034 c000 0202 0aff ff01
+Vr HL TOS  Len   ID Flg  off TTL Pro  cks      Src	Dst	Data
+ 4  5  00 0054 2072   2 0000  3e  01 5034 192.0.2.2  10.255.255.1
+ICMP: type 8, code 0, size 64, id 0x0133, seq 0x0000
+^C--- 10.255.255.1 ft_ping statistics ---
+1 packets transmitted, 0 packets received, 100% packet loss
 ```
 
-- Filtering: a raw `IPPROTO_ICMP` socket receives a copy of every ICMP packet arriving at the machine, not just the replies to your requests. That includes other programs' pings, errors meant for other processes, etc. The kernel does no filtering for you. This is the concrete answer to "ICMP has no ports, so how do I find my replies?" -> You have to filter.
+Argument errors:
 
-#### Why privileges are needed
+```text
+$ ./ft_ping
+./ft_ping: missing host operand
+Try './ft_ping --help' for more information.
 
-Raw socket are powerful in ways that could be abused. A program with raw sockets can forge packets and observe ICMP traffic belonging to other processes. Because of this, Linux restricts them.
-
-Instead of "root can do everything", Linux splits root's powers into pieces.
-
-#### Check the knowledge
-
-1. Your raw socket receives every ICMP packet arriving on the machine. What will you check in each received packet to decide "this reply is mine"?
-   -> Check the type first, then the identifier (and sequence for matching), and the location of the identifier depends on the type.
-
-2. When you call `recvfrom()`, what comes first in your buffer before the ICMP header, and how do you find where the ICMP header starts?
-   -> IP header. Because 84 bytes received = 20 (IP header) + 8 (ICMP header) + 56 (ICMP data)
-
-### 1 - Build Echo Request
-
-#### Layout
-
-```
-offset  0      1      2      3      4      5      6      7      8 ...           63
-      +------+------+------+------+------+------+------+------+--------------------+
-      | type | code |  checksum   | identifier  |  sequence   |   56 bytes data    |
-      |  8   |  0   |   (later)   |  (yours)    |   0,1,2...  | (timestamp + fill) |
-      +------+------+------+------+------+------+------+------+--------------------+
+$ ./ft_ping nonexistent.invalid
+ft_ping: unknown host
 ```
 
-```c
-struct icmphdr
-{
-  uint8_t type;		/* message type */
-  uint8_t code;		/* type sub-code */
-  uint16_t checksum;
-  union
-  {
-    struct
-    {
-      uint16_t	id;
-      uint16_t	sequence;
-    } echo;			/* echo datagram */
-    uint32_t	gateway;	/* gateway address */
-    struct
-    {
-      uint16_t	__glibc_reserved;
-      uint16_t	mtu;
-    } frag;			/* path mtu discovery */
-  } un;
-};
+---
 
-// or
+## How it works
 
-/*
- * Internal of an ICMP Router Advertisement
- */
-struct icmp_ra_addr
-{
-  uint32_t ira_addr;
-  uint32_t ira_preference;
-};
+### Program flow
 
-struct icmp
-{
-  uint8_t  icmp_type;	/* type of message, see below */
-  uint8_t  icmp_code;	/* type sub code */
-  uint16_t icmp_cksum;	/* ones complement checksum of struct */
-  union
-  {
-    uint8_t ih_pptr;	/* ICMP_PARAMPROB */
-    struct in_addr ih_gwaddr;	/* gateway address */
-    struct ih_idseq		/* echo datagram */
-    {
-      uint16_t icd_id;
-      uint16_t icd_seq;
-    } ih_idseq;
-    uint32_t ih_void;
-
-    /* ICMP_UNREACH_NEEDFRAG -- Path MTU Discovery (RFC1191) */
-    struct ih_pmtu
-    {
-      uint16_t ipm_void;
-      uint16_t ipm_nextmtu;
-    } ih_pmtu;
-
-    struct ih_rtradv
-    {
-      uint8_t irt_num_addrs;
-      uint8_t irt_wpa;
-      uint16_t irt_lifetime;
-    } ih_rtradv;
-  } icmp_hun;
-#define	icmp_pptr	icmp_hun.ih_pptr
-#define	icmp_gwaddr	icmp_hun.ih_gwaddr
-#define	icmp_id		icmp_hun.ih_idseq.icd_id
-#define	icmp_seq	icmp_hun.ih_idseq.icd_seq
-#define	icmp_void	icmp_hun.ih_void
-#define	icmp_pmvoid	icmp_hun.ih_pmtu.ipm_void
-#define	icmp_nextmtu	icmp_hun.ih_pmtu.ipm_nextmtu
-#define	icmp_num_addrs	icmp_hun.ih_rtradv.irt_num_addrs
-#define	icmp_wpa	icmp_hun.ih_rtradv.irt_wpa
-#define	icmp_lifetime	icmp_hun.ih_rtradv.irt_lifetime
-  union
-  {
-    struct
-    {
-      uint32_t its_otime;
-      uint32_t its_rtime;
-      uint32_t its_ttime;
-    } id_ts;
-    struct
-    {
-      struct ip idi_ip;
-      /* options and then 64 bits of data */
-    } id_ip;
-    struct icmp_ra_addr id_radv;
-    uint32_t   id_mask;
-    uint8_t    id_data[1];
-  } icmp_dun;
-#define	icmp_otime	icmp_dun.id_ts.its_otime
-#define	icmp_rtime	icmp_dun.id_ts.its_rtime
-#define	icmp_ttime	icmp_dun.id_ts.its_ttime
-#define	icmp_ip		icmp_dun.id_ip.idi_ip
-#define	icmp_radv	icmp_dun.id_radv
-#define	icmp_mask	icmp_dun.id_mask
-#define	icmp_data	icmp_dun.id_data
-};
+```text
+main
+ ├─ parse_args()          -v / -? / HOST            (parse.c)
+ ├─ resolve_dest()        getaddrinfo(AF_INET)      (network.c)
+ ├─ create_icmp_socket()  socket(AF_INET, SOCK_RAW, IPPROTO_ICMP)
+ ├─ handle_signal()       SIGINT -> g_stop = true   (signal.c)
+ └─ run_loop()                                      (loop.c)
+     ├─ print_header()
+     ├─ while (!g_stop)
+     │   ├─ time to send?   -> send_echo_request(), next_send += 1000 ms
+     │   └─ recv_echo_reply(until next_send)        (receive.c)
+     │        ├─ Echo Reply for us  -> record_reply() + print_reply()
+     │        └─ ICMP error for us  -> print_error()
+     └─ print_stats()
 ```
 
-#### Byte order
+The program is **single-threaded** and uses **no `SIGALRM`**. Sending and receiving are driven by one `select()` loop with an absolute deadline (see [Timing model](#timing-model)).
 
-`man byteorder`
+### Building the Echo Request
 
-- Byte order (endianness) is the order in which a multi-byte number is stored in memory.
+The packet is 64 bytes: an 8-byte ICMP header followed by a 56-byte payload. The kernel adds the 20-byte IPv4 header, so 84 bytes go on the wire.
 
-- x86 machines store the low-order byte first (little-endian). Network protocols are defined with the high-order byte first (big-endian).
-
-#### The checksum
-
-Purpose: The receiver recomputes it to detect corrupted packets. A packet with a wrong checksum is silenty dropped. That means a broken checksum looks exactly like "the host doesn't answer".
-
-The algorithm:
-
-- Set the checksum field to 0 first.
-- Treat the whole ICMP message (header + data) as a sequence of 16-bit words and add them together in a 32-bit accumulator.
-- If there's one leftover byte (odd length), add it too, as if padded with a zero byte.
-- "Fold" the carries: while the accumulator has bits above the low 16, add the high part to the low part.
-- Take the one's complement (`~`) of the result and keep 16 bits. That's the checksum.
-
-A subtle but well-known property: this one's complement sum gives correct results regardless of the machine's byte order, as long as we read the 16-bit words directly from the packet's memory and store the result back the same way.
-
-#### The data part
-
-`inetutils` sends 56 data bytes by default. Since the destination echoes the data back unchanged, many implementations store the send time (`struct timeval` from ``gettimeofday()`) at the start of the data and fill the rest with a pattern.
-
-#### Sending it: `sendto()`
-
-```c
-ssize_t sendto(int sockfd,
-                const void *buf,
-                size_t len,
-                int flags,
-                const struct sockaddr *dest,
-                socklen_t dest_len);
+```text
+ 0      1      2      3      4      5      6      7      8                     63
++------+------+------+------+------+------+------+------+------------------------+
+| type | code |  checksum   | identifier  |  sequence   |   payload (56 bytes)   |
+|  8   |  0   |   RFC 1071  | pid & 0xffff|  0, 1, 2…   | timespec | 0x10 0x11… |
++------+------+------+------+------+------+------+------+------------------------+
 ```
 
-- `buf`, `len`: your ICMP message only (64 bytes) with no IP header, because the kernel adds it.
-- `dest`: a `struct sockaddr_in` holding the destination IPv4 address. It's cast to the generic `struct sockaddr *` because `sendto()` works for every address family.
-- Return value: the number of bytes sent, or `-1` with `errno` set.
+- **Identifier**: `getpid() & 0xffff`, in network byte order. ICMP has no ports, so this field is how replies are matched to this process.
+- **Sequence**: starts at 0 and goes up by one per packet. It is stored on 16 bits and wraps at 65536.
+- **Payload**: the first 16 bytes hold the send time (`struct timespec`, `CLOCK_MONOTONIC`). The remaining bytes are the filler pattern `i`, so byte *i* has the value *i*. The destination echoes the payload back unchanged, so every reply brings its own send timestamp with it.
+
+### The Internet checksum
+
+RFC 1071 one's-complement sum over the whole ICMP message (header + payload):
+
+1. Set the checksum field to 0.
+2. Read the message as big-endian 16-bit words and add them into a 32-bit accumulator. If the length is odd, pad the last byte with a zero.
+3. Fold the carries back in: `sum = (sum & 0xffff) + (sum >> 16)` until nothing is above bit 15.
+4. Take the one's complement, then store it with `htons()`.
+
+The same function **validates** incoming replies. A correct message, checksum field included, sums to `0`. Replies that fail this test are dropped.
+
+### Receiving and filtering
+
+A raw `IPPROTO_ICMP` socket gets a copy of **every** ICMP packet the host receives. That includes other `ping` processes, unrelated errors and, on loopback, ft_ping's own outgoing requests. `recvfrom()` returns the full IP datagram, so the parser:
+
+1. Reads the IP header and skips it using `ip_hl * 4`. The header is not always 20 bytes, because IP options can make it longer.
+2. Checks each length before reading the next header, so a truncated or malformed packet cannot cause an out-of-bounds read.
+3. Dispatches on the ICMP type:
+
+| Type | Accepted when | Result |
+|---|---|---|
+| `0` Echo Reply | identifier = ours, payload holds a timestamp, checksum is valid | RTT computed, reply line printed |
+| `3` Destination Unreachable / `11` Time Exceeded | the **quoted** original packet (`[ICMP err hdr][orig IP hdr][orig ICMP hdr]`) carries our identifier | error line printed (+ header dump with `-v`) |
+| anything else, including our own Echo Requests seen on loopback | — | silently ignored |
+
+For errors, the identifier sits inside the *quoted* packet, after a second IP header of variable length. The parser skips that header with its own `ip_hl` before it reads the identifier.
+
+### Timing model
+
+```text
+next_send = now
+loop:
+    if now >= next_send: send; next_send += 1000 ms
+    select(sock, timeout = next_send - now)    # wake on a packet OR at next_send
+```
+
+- Each send time is computed as `previous + 1000 ms`, not as "1 s after the previous send finished". Processing time therefore does not add up, and the interval does not drift over a long run.
+- All times come from **`CLOCK_MONOTONIC`**, so NTP corrections or a manual clock change cannot produce a negative or wrong RTT.
+- A reply is handled as soon as it arrives, even if it is late and its request was not the last one sent. Its RTT is still correct because the RTT comes from the timestamp inside the reply, not from the sender's own records.
+
+### RTT and statistics
+
+- **RTT** = `now_ms() - timestamp_echoed_in_payload`, printed with 3 decimals.
+- **Duplicates**: a `seen[65536]` table indexed by sequence number. A second reply for the same sequence is printed with `(DUP!)` and counted separately, so it does not change the received count or the RTT figures. The entry is cleared when that sequence number is sent again, which handles wrap-around.
+- **Packet loss** = `(transmitted - received) * 100 / transmitted`, using integer division as inetutils does.
+- **min / avg / max / stddev**: running min and max, plus the sum and the sum of squares, so the statistics use constant memory:
+
+```text
+avg    = Σrtt / n
+stddev = sqrt( Σrtt² / n − avg² )
+```
+
+### Signal handling
+
+`SIGINT` is installed with `sigaction()`. The handler only sets `volatile sig_atomic_t g_stop`. If `select()` or `recvfrom()` is interrupted with `EINTR`, this is not treated as an error: the loop checks `g_stop`, exits cleanly, prints the statistics and closes the socket.
+
+---
+
+## Project layout
+
+```text
+.
+├── Makefile
+├── includes/
+│   └── ft_ping.h       constants, structs, prototypes
+└── src/
+    ├── main.c          start-up sequence, socket cleanup
+    ├── parse.c         command-line parsing (-v, -?, HOST)
+    ├── network.c       DNS resolution, raw socket creation
+    ├── loop.c          send loop, packet building, checksum, statistics
+    ├── receive.c       select() wait, recvfrom(), packet filtering/parsing
+    ├── print.c         every user-facing line (header, replies, errors, stats, help)
+    ├── signal.c        SIGINT handler
+    └── time.c          monotonic clock helpers
+```
+
+Main data structures (`includes/ft_ping.h`):
+
+| Struct | Role |
+|---|---|
+| `t_ping_option` | parsed CLI: `verbose`, `dest` |
+| `t_ping_context` | read-only run context: socket, resolved `sockaddr_in`, display name and IP, options |
+| `t_ping_reply` | one packet that belongs to us: Echo Reply or ICMP error, with source, TTL, size, seq, RTT, type/code, pointer to the quoted IP header |
+| `t_ping_stats` | counters, RTT accumulators, duplicate table |
+
+---
+
+## Error handling and exit codes
+
+| Situation | Message | Exit |
+|---|---|---|
+| `-?` / `--help` | help text | `0` |
+| missing host, more than one host, unknown option | `missing host operand` / `too many destinations` / `invalid option -- 'x'` / `unrecognized option '--x'` + `Try '... --help'` | `64` (`EX_USAGE`) |
+| host does not resolve | `ft_ping: unknown host` | `1` |
+| not root and no `CAP_NET_RAW` | `ft_ping: Lacking privilege for icmp socket.` | `1` |
+| `sendto` / `select` / `recvfrom` / `sigaction` failure | `ft_ping: <call>: strerror(errno)` | `1` |
+| interrupted, at least one reply received | statistics | `0` |
+| interrupted, no reply received | statistics | `1` |
+
+Memory: no heap allocation in the main code path. The `addrinfo` list is freed right after resolution, the receive buffer is a fixed 64 KiB static, and the socket is closed on every exit path after it is opened.
+
+---
+
+## Differences from inetutils 2.0
+
+- Only `-v` and `-?` are implemented. The other inetutils flags are part of the bonus.
+- Reply addresses are numeric. There is no reverse DNS, which the subject allows.
+- The statistics banner reads `--- HOST ft_ping statistics ---`, so the output can be told apart from the system `ping`.
+- The subject allows ±30 ms of difference on the measured RTT.
+
+---
+
+## Testing
+
+Comparing with the reference on the same machine:
+
+```sh
+ping -V                                   # must say: ping (GNU inetutils) 2.0
+sudo ping     -v -c 3 8.8.8.8
+sudo ./ft_ping -v 8.8.8.8                 # Ctrl+C after 3 replies
+```
+
+Scenarios worth checking:
+
+| Scenario | How |
+|---|---|
+| Loopback / LAN / Internet | `127.0.0.1`, your gateway, `8.8.8.8` |
+| Hostname resolution | `google.com`, `localhost` |
+| Unknown host | `nonexistent.invalid` |
+| Silent host (100% loss, exit 1) | an unused address on your LAN |
+| Time Exceeded | `sudo iptables -t mangle -A OUTPUT -p icmp -j TTL --ttl-set 1` (remove afterwards) or test against a router that drops TTL=1 |
+| Destination Unreachable + `-v` dump | an unroutable address behind a gateway that answers |
+| Concurrent pings don't mix | run ft_ping and system `ping` to the same host at the same time: each one must count only its own replies |
+| Packet loss | `sudo tc qdisc add dev lo root netem loss 30%` then ping `127.0.0.1` (`tc qdisc del dev lo root` to undo) |
+| Privileges | run without `sudo`: clean error, exit 1 |
+| Leaks / FDs | `sudo valgrind --leak-check=full --track-fds=yes ./ft_ping 127.0.0.1` |
+
+To see the packets on the wire:
+
+```sh
+sudo tcpdump -ni any icmp -vv
+```
+
+---
+
+## References
+
+- RFC 792 — Internet Control Message Protocol
+- RFC 1071 — Computing the Internet Checksum
+- RFC 791 — Internet Protocol
+- `man 7 raw`, `man 7 icmp`, `man 2 socket`, `man 2 sendto`, `man 2 recvfrom`, `man 2 select`, `man 3 getaddrinfo`, `man 7 capabilities`
+- GNU inetutils 2.0 `ping` (behaviour reference only. No code from it was reused)
+- [NOTES.md](NOTES.md): my learning notes on ICMP, raw sockets, byte order and the checksum
