@@ -3,8 +3,6 @@
 A from-scratch reimplementation of `ping` in C, modelled on **GNU inetutils 2.0**.
 It sends ICMP Echo Requests over a raw IPv4 socket, matches the replies to its own requests, measures the round-trip time (RTT), and prints the same output and statistics as the reference.
 
-> 42 School project (advanced network branch). This README covers the **mandatory part** only.
-
 ---
 
 ## Table of contents
